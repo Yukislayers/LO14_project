@@ -1,0 +1,34 @@
+#!/bin/bash
+#compare l'arboresence du dossier cherche les fichiers ayant le meme nom et les sycrhise en fonction de leur date de modif
+#ce script est a executer avec un sudo pour pouvoir créer les fichiers manquants
+
+folder1=$1
+folder2=$2
+
+
+nb1fichier=$(find $1 -type f | wc -l | awk '{print $1}')
+nb2fichier=$(find $2 -type f | wc -l | awk '{print $1}')
+
+for fich in `ls $folder1`
+do
+        isinotherfolder=$(find $2 -type f -name "$fich")
+
+        if [ "$isinotherfolder" != "" ]
+        then
+                echo "$fich est dans les 2 dossier"
+
+                if [ $folder1/$fich -ot $folder2/$fich ]
+                then
+                        echo "Le fichier du dossier 2 est plus récent que celui du dossier 1"
+                        echo "2 -> 1"
+                        cp -f $folder2/$fich $folder1/$fich
+                else
+                        echo "Le fichier du dossier 2 est plus récent que celui du dossier 1"
+                        echo "1 -> 2"
+                        cp -f $folder1/$fich $folder2/$fich
+                fi
+        else 
+                echo "$fich n'est que dans le dossier 1"
+                cp -f $folder1/$fich $folder2/$fich
+        fi
+done

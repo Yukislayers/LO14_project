@@ -1,0 +1,15 @@
+#!/bin/bash
+#compare l'arborescence de 2 dossier
+folder1=$1
+folder2=$2
+
+mydiff=$(diff <(ls $folder1) <(ls $folder2))
+
+echo $mydiff
+
+if [ "$mydiff" == "" ]
+then
+        echo "Arborescence identique"
+else
+        echo "Arborescence differentes"
+fi      

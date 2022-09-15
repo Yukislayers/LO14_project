@@ -1,0 +1,32 @@
+#!/bin/bash
+#Compare les noms avec une boucle while
+folder1=$1
+folder2=$2
+
+nb1fichier=$(find /home/Shino/ArbreA -type f | wc -l | awk '{print $1}')
+nb2fichier=$(find /home/Shino/ArbreB -type f | wc -l | awk '{print $1}')
+nb1dossier=$(find /home/Shino/ArbreA -type d | wc -l | awk '{print $1}')
+nb2dossier=$(find /home/Shino/ArbreB -type d | wc -l | awk '{print $1}')
+nb1=$(($nb1fichier + $nb1dossier - 1))
+nb2=$(($nb2fichier + $nb2dossier - 1))
+
+echo $nb1
+echo $nb2
+
+for fich in `ls $folder1`
+do
+        indice=0
+        for fich2 in `ls $folder2`
+        do
+                indice=$(($indice + 1))
+                if [ "$fich" = "$fich2" ]
+                then
+                        echo "$fich , $fich2 les fichiers ont le même nom"
+                elif [ "$fich" != "$fich2" ] && [ $indice -eq $nb2 ]
+                then
+                        echo "$fich n'a aucune fichier du même nom dans l'autre Arbre"
+                        cp -aRv /home/Shino/$folder1/$fich /home/Shino/$folder2/$fich
+                        # On copie le fichier dans l'autre Arbre
+                fi
+        done
+done

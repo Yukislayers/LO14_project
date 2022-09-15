@@ -1,0 +1,15 @@
+#le script compare juste le nombre de ligne
+#Test1
+
+if [ -r $1 ] && [ -r $2 ]
+then                                                                                                           
+        if [ `awk 'END{print NR}' $1` -eq `awk 'END{print NR}' $2` ]
+        then
+                echo "Meme nombre de ligne"
+        else
+                echo "Nombre de ligne different"
+        fi
+
+else
+        echo "Il manque un/des argument/s"
+fi

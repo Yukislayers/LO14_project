@@ -1,0 +1,18 @@
+#!/bin/bash
+#Compare les noms avec une boucle while
+
+folder1=$1
+folder2=$2
+
+for fich in `ls $folder1`
+do
+        for fich2 in `ls $folder2`
+        do
+                if [ "$fich" = "$fich2" ]
+                then
+                        echo "$fich , $fich2 les fichiers ont le même nom"
+                else
+                        echo "$fich , $fich2 les fichiers n'ont pas le même nom"
+                fi
+        done
+done

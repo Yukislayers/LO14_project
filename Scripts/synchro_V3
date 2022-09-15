@@ -1,0 +1,139 @@
+#!/bin/bash
+#compare l'arboresence des 2 dossiers, verifie si des fichiers sont présents sur les 2 dossiers et remplace l'ancien par le nouveau
+#si un fichier n'est pas présent dans l'autre dossier, le copie le fichier dans l'autre dossier
+
+historique=""
+
+
+function ecrirejournal() {
+        name="name:"$(stat -c%n $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+        mode="mode: "$(stat -c%a $1)
+        taille="taille: "$(stat -c%B $1)
+        date="date: "$(stat -c%y $1)
+
+        line="${name} ${mode} ${taille} ${date}"
+
+        echo $line >> journal
+}
+
+
+
+
+function synchro() {
+
+        for fich in `ls $1`
+        do
+                folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                echo ":$folder/$fich "
+                isinjournal=$(grep ":$folder/$fich " journal)
+                echo "isinjournal : $isinjournal"
+
+                if [[ "$isinjournal" == "" ]]
+                then
+
+                        echo "Le fichier est $1/$fich"
+                        typedefich=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                        echo "Le type du fichier est : $typedefich"
+
+                        if [[ "$typedefich" != "directory" ]]
+                        then
+                                #on regarde si le fichier existe dans l'autre dossier
+                                isinotherfolder=$(find "$2" -type f -name "$fich")
+
+                                echo "isinjournal : $isinjournal"
+
+                                if [[ "$isinotherfolder" != "" ]]
+                                then
+                                        echo "$fich est dans les 2 dossier"
+                                        #on compare leurs date de modif et on remplace le plus vieux par le plus recent
+                                        if [[ $1/$fich -ot $2/$fich ]]
+                                        then
+                                                echo "Le fichier du dossier $2 est plus récent que celui du dossier $1"
+                                                echo "2 -> 1"
+                                                cp -f $2/$fich $1/$fich
+                                        else
+                                                echo "Le fichier du dossier $1 est plus récent que celui du dossier $2"
+                                        echo "1 -> 2"
+                                                cp -f $1/$fich $2/$fich
+                                        fi
+                                else
+                                        #si il n'est pas dans l'autre dossier on le copie directement dans l'autre dossier
+                                        echo "$fich n'est que dans le dossier $1"
+                                        cp -f $1/$fich $2/$fich
+                                fi
+                                #on ecrit le nom du fichier que l'on viens de traiter dans l'historique pour ne pas le remodifier dans la boucle d'après
+                                #historique="${historique} $fich"
+                                ecrirejournal $1/$fich
+                                echo "......................................................"
+                        else
+                                isinotherfolder=$(find "$2" -type d -name "$fich")
+
+                                if [[ "$isinotherfolder" != "" ]]
+                                then
+                                        echo "Le dossier $1/$fich est présent dans le dossier $2"
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$1/$fich" "$2/$fich"
+                                        echo "--------------------------------------------------"
+                                else
+                                        echo "Le dossier $1/$fich n'est pas présent dans le dossier $2"
+                                        mkdir $2/$fich
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$1/$fich" "$2/$fich"
+                                        echo "--------------------------------------------------"
+                                fi
+                        fi
+                fi
+        done
+
+        #meme princpie que la boucle d'avant mais cette fois ci on verife juste si les fichiers n'existent pas dans l'autre dossier et donc si il n'a pas été traité
+        for fich in `ls $2`
+        do
+                folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                isinjournal=$(grep ":$folder/$fich " journal)
+                echo "isinjournal $isinjournal"
+
+                if [[ "$isinjournal" == "" ]]
+                then
+
+                        echo "Le fichier est $2/$fich"
+                        typedefich=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                        echo "Le  type du fichier est $typedefich"
+
+                        if [[ "$typedefich" != "directory" ]]
+                        then
+
+                                isinotherfolder=$(find "$1" -type f -name "$fich")
+
+                                if [[ "$isinotherfolder" == "" ]]
+                                then
+                                        echo "$2/$fich n'est que dans le dossier $2"
+                                        cp -f $2/$fich $1/$fich
+                                        #historique="${historique} $fich"
+                                        ecrirejournal $2/$fich
+                                        echo "..............................................................."
+                                fi
+                        else
+                                isinotherfolder=$(find "$1" -type d -name "$fich")
+
+                                if [[ "$isinotherfolder" != "" ]]
+                                then
+                                        echo "Le dossier $2/$fich est déjà présnent dans $1"
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$2/$fich" "$1/$fich"
+                                        echo "--------------------------------------------------"
+                                else
+                                        echo "Le dossier $2/$fich n'est pas présnent dans $1"
+                                        mkdir $1/$fich
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$2/$fich" "$1/$fich"
+                                        echo "--------------------------------------------------"
+                                fi
+                        fi
+                fi
+        done
+
+}
+
+synchro $1 $2
+
+echo "Synchronisation terminée"

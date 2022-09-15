@@ -1,0 +1,50 @@
+#!/bin/bash
+#compare l'arboresence des 2 dossiers, verifie si des fichiers sont présents sur les 2 dossiers et remplace l'ancien par le nouveau
+#si un fichier n'est pas présent dans l'autre dossier, le copie le fichier dans l'autre dossier
+
+folder1=$1
+folder2=$2
+historique=""
+
+for fich in `ls $folder1`
+do
+        #on regarde si le fichier existe dans l'autre dossier
+        isinotherfolder=$(find $2 -type f -name "$fich")
+
+        if [[ "$isinotherfolder" != "" ]]
+        then
+                echo "$fich est dans les 2 dossier"
+                #on compare leurs date de modif et on remplace le plus vieux par le plus recent
+                if [[ $folder1/$fich -ot $folder2/$fich ]]
+                then
+                        echo "Le fichier du dossier 2 est plus récent que celui du dossier 1"
+                        echo "2 -> 1"
+                        cp -f $folder2/$fich $folder1/$fich
+                else
+                        echo "Le fichier du dossier 2 est plus récent que celui du dossier 1"
+                        echo "1 -> 2"
+                        cp -f $folder1/$fich $folder2/$fich
+                fi
+        else
+                #si il n'est pas dans l'autre dossier on le copie directement dans l'autre dossier
+                echo "$fich n'est que dans le dossier 1"
+                cp -f $folder1/$fich $folder2/$fich
+        fi
+        #on ecrit le nom du fichier que l'on viens de traiter dans l'historique pour ne pas le remodifier dans la boucle d'après
+        historique="${historique} $fich"
+done
+
+#meme princpie que la boucle d'avant mais cette fois ci on verife juste si les fichiers n'existent pas dans l'autre dossier et donc si il n'a pas été traité
+for fich in `ls $folder2`
+do
+        isinotherfolder=$(find $1 -type f -name $fich)
+
+        if [[ "$isinotherfolder" == "" ]]
+        then
+                echo "$fich n'est que dans le dossier 2"
+                cp -f $folder2/$fich $folder1/$fich
+        fi
+        historique="${historique} $fich"
+done
+
+echo "Synchronisation terminé"

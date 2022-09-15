@@ -1,0 +1,378 @@
+#!/bin/bash
+#compare l'arboresence des 2 dossiers, verifie si des fichiers sont présents sur les 2 dossiers et remplace l'ancien par le nouveau
+#si un fichier n'est pas présent dans l'autre dossier, le copie le fichier dans l'autre dossier
+
+historique=""
+echo '' > journaltemp
+
+function ecrirejournal() {
+        name="name: "$(stat -c%n $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+        mode="mode: "$(stat -c%a $1)
+        taille="taille: "$(stat -c%B $1)
+        date="date: "$(stat -c%y $1)
+
+        line="${name} ${mode} ${taille} ${date}"
+
+        echo $line >> journaltemp
+}
+
+function comparejournal() {
+        f=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+        line=$(grep "$f" journal)
+
+        modejournal=$(echo $line | awk 'BEGIN{FS=" "} {print $4}')
+        taillejournal=$(echo $line | awk 'BEGIN{FS=" "} {print $6}')
+        datejournal=$(echo $line | awk 'BEGIN{FS=" "} {print $8 " " $9 " " $10}')
+
+        modefich=$(stat -c%a $1)
+        taillefich=$(stat -c%B $1)
+        datefich=$(stat -c%y $1)
+
+        #echo "line : $line"
+        #echo "modejournal : $modejournal"
+        #echo "taillejournal : $taillejournal"
+        #echo "datejournal : $datejournal"
+
+        #echo "modefich : $modefich"
+        #echo "taillefich : $taillefich"
+        #echo "datefich : $datefich"
+
+        if [[ "$modefich" == "$modejournal" ]] && [[ "$taillefich" == "$taillejournal" ]] && [[ "$datefich" == "$datejournal" ]]
+        then
+                echo "identique"
+        else
+                echo "different"
+        fi
+
+}
+
+
+
+function synchro() {
+
+
+        for fich in `ls $1`
+        do
+
+                echo "Le fichier est $1/$fich" >> journalconflit
+                echo "le fichier est $1/$fich"
+                typedefich=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                echo "Le type du fichier est : $typedefich" >> journalconflit
+
+                if [[ "$typedefich" != "directory" ]]
+                then
+
+                        folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                        #echo "$folder/$fich "
+                        isinjournal=$(grep "$folder/$fich " journal)
+                        isinjournaltemp=$(grep "$folder/$fich " journaltemp)
+                        #echo "isinjournal : $isinjournal"
+                        #echo "isinjournaltemp : $isinjournaltemp"
+
+                        isinfolder2=$(find $2 -name $fich)
+                        if [[ "$isinfolder2" == "" ]] && [[ "$isinjournal" != "" ]]
+                        then
+                                echo "$2/$fich a été supprimé"
+                                rm -r $1/$fich
+
+                        elif [[ "$isinjournal" != "" ]] && [[ "$isinjournaltemp" == "" ]]
+                        then
+
+                                #echo "$fich est dans le journal"
+                                #on compare leurs date de modif et on remplace le plus vieux par le plus recent
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+
+                                        isfich1sameinjournal=$(comparejournal $1/$fich)
+                                        #echo "isfich1sameinjournal : $isfich1sameinjournal"
+
+                                        isfich2sameinjournal=$(comparejournal $2/$fich)
+                                        #echo "isfich2sameinjournal : $isfich2sameinjournal"
+
+                                        if [[ "$isfich1sameinjournal" == "different" ]] || [[ "$isfich2sameinjournal" == "different" ]]
+                                        then
+                                                if [[ "$isfich1sameinjournal" == "different" ]] && [[ "$isfich2sameinjournal" == "different" ]]
+                                                then
+                                                        echo "Les 2 fichiers ont été modifiés depuis la dernière synchro, on a remplacé par le plus récent" >> journalconflit
+                                                fi
+
+                                                if [[ $1/$fich -ot $2/$fich ]]
+                                                then
+                                                        echo "Le fichier du dossier $2 est plus récent que celui du dossier $1, on a donc remplacé le fichier de $1" >> journalconflit
+                                                        #echo "2 -> 1"
+                                                        cp -a $2/$fich $1/$fich
+                                                else
+                                                        echo "Le fichier du dossier $1 est plus récent que celui du dossier $2, on a donc remplacé le fichier de $2" >> journalconflit
+                                                        #echo "1 -> 2"
+                                                        cp -a $1/$fich $2/$fich
+                                                fi
+
+                                                ecrirejournal $1/$fich
+                                                echo "......................................................"
+                                        else
+                                                ecrirejournal $1/$fich
+                                        fi
+                                else
+                                        echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+
+                        elif [[ "$isinjournal" == "" ]] && [[ "$isinjournaltemp" == "" ]]
+                        then
+                                #si il n'est pas dans l'autre dossier on le copie directement dans l'autre dossier
+                                echo "$fich n'est que dans le dossier $1, il a été copié dans $2" >> journalconflit
+                                cp -f $1/$fich $2/$fich
+
+                                ecrirejournal $1/$fich
+                                echo "......................................................"
+                        fi
+                        #on ecrit le nom du fichier que l'on viens de traiter dans l'historique pour ne pas le remodifier dans la boucle d'après
+                        #historique="${historique} $fich"
+                else
+                        isinotherfolder=$(find "$2" -name "$fich")
+
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+                                        #echo "Le dossier $1/$fich est présent dans le dossier $2"
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$1/$fich" "$2/$fich"
+                                        echo "--------------------------------------------------"
+                                else
+                                        echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                echo "Le dossier $1/$fich n'est pas présent dans le dossier $2, il a été créer dans $2" >> journalconflit
+                                mkdir $2/$fich
+                                echo "//////////////////////////////////////////////////"
+                                synchro "$1/$fich" "$2/$fich"
+                                echo "--------------------------------------------------"
+                        fi
+                fi
+
+        done
+
+
+
+        if [[ `ls $1` == "" ]]
+        then
+                rm -r $1
+        fi
+
+        #meme princpie que la boucle d'avant mais cette fois ci on verife juste si les fichiers n'existent pas dans l'autre dossier et donc si il n'a pas été traité
+        for fich in `ls $2`
+        do
+
+                echo "Le fichier est $2/$fich" >> journalconflit
+                echo "le fichier est $2/$fich"
+                typedefich=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                #echo "Le  type du fichier est $typedefich"
+
+                if [[ "$typedefich" != "directory" ]]
+                then
+
+                        folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                        isinjournal=$(grep "$folder/$fich " journal)
+                        isinjournaltemp=$(grep "$folder/$fich " journaltemp)
+                        #echo "isinjournal : $isinjournal"
+                        #echo "isinjournaltemp : $isinjournaltemp"
+
+                        if [[ "$isinjournal" == "" ]] && [[ "$isinjournaltemp" == "" ]]
+                        then
+
+                                echo "$2/$fich n'est que dans le dossier $2, il a été créer dans $1" >> journalconflit
+                                cp -a $2/$fich $1/$fich
+                                #historique="${historique} $fich"
+                                ecrirejournal $2/$fich
+                                echo "..............................................................."
+
+                        elif [[ "$isinjournal" != "" ]] && [[ "$isinjournaltemp" == "" ]]
+                        then
+                                echo "$2/$fich n'est que dans le dossier $2 et a été supprimer du dossier $1, on va donc le supprimer"
+                                rm -r $2/$fich
+                                #echo "$2/$fich n'est que dans le dossier $2, il a été créer dans le dossier $1" >> journalconflit
+                                #cp -a $2/$fich $1/$fich
+                                #ecrirejournal $2/$fich
+                                echo ".............................................................."
+                        fi
+                else
+                        isinotherfolder=$(find "$1" -name "$fich")
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+                                        #echo "Le dossier $2/$fich est déjà présnent dans $1"
+                                        echo "//////////////////////////////////////////////////"
+                                        synchro "$2/$fich" "$1/$fich"
+                                        echo "--------------------------------------------------"
+                                else
+                                        echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                echo "Le dossier $2/$fich n'est pas présent dans $1, il a été créer dans $2" >> journalconflit
+                                mkdir $1/$fich
+                                echo "//////////////////////////////////////////////////"
+                                synchro "$2/$fich" "$1/$fich"
+                                echo "--------------------------------------------------"
+                        fi
+                fi
+        done
+        if [[ `ls $2` == "" ]]
+        then
+                rm -r $2
+        fi
+
+}
+
+function mkjournal() {
+
+        for fich in `ls $1`
+        do
+                echo "le fichier est $1/$fich" >> journalconflit
+                echo "le fichier est $1/$fich"
+                typedefich=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                if [[ "$typedefich" != "directory" ]]
+                then
+                        folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                        isinjournal=$(grep "$folder/$fich " journaltemp)
+                        isinotherfolder=$(find "$2" -name "$fich")
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$isinjournal" == "" ]] && [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+                                        if [[ $1/$fich -ot $2/$fich ]]
+                                        then
+                                                cp -a $2/$fich $1/$fich
+                                        else
+                                                cp -a $1/$fich $2/$fich
+                                        fi
+                                        ecrirejournal $1/$fich
+                                        echo '....................................'
+                                elif [[ "$typedefich1" != "$typedefich2" ]]
+                                then
+                                       echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                cp -a $1/$fich $2/$fich
+                      
+                        fi
+                else
+                        isinotherfolder=$(find "$2" -name "$fich")
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+                                        echo '/////////////////////////////////////'
+                                        mkjournal $1/$fich $2/$fich
+                                        echo '-------------------------------------'
+                                else
+                                        echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                mkdir $2/$fich
+                                echo '/////////////////////////////////////'
+                                mkjournal $1/$fich $2/$fich
+                                echo '-------------------------------------'
+                        fi
+                fi
+        done
+
+        for fich in `ls $2`
+        do
+                echo "le fichier est $2/$fich" >> journalconflit
+                echo "le fichier est $1/$fich"
+                typedefich=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                if [[ "$typedefich" != "directory" ]]
+                then
+                        folder=$(echo $1 | awk 'BEGIN{FS="/"; OFS="/"} {$1="";print $0}')
+                        isinjournal=$(grep "$folder/$fich " journaltemp)
+                        isinotherfolder=$(find "$1" -name "$fich")
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$isinjournal" == "" ]] && [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+
+                                        if [[ $1/$fich -ot $2/$fich ]]
+                                        then
+                                                cp -a $2/$fich $1/$fich
+                                        else
+                                                cp -a $1/$fich $2/$fich
+                                        fi
+                                        ecrirejournal $1/$fich
+                                        echo '...................................'
+                                elif [[ "$typedefich1" != "$typedefich2" ]]
+                                then
+                                         echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                cp -a $2/$fich $1/$fich
+                                ecrirejournal $2/$fich
+                                echo "................................."
+                        fi
+                else
+                        isinotherfolder=$(find "$1" -name "$fich")
+
+                        if [[ "$isinotherfolder" != "" ]]
+                        then
+                                typedefich1=$(file "$1/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+                                typedefich2=$(file "$2/$fich" | awk 'BEGIN{FS=": "} {print $2}')
+
+                                if [[ "$typedefich1" == "$typedefich2" ]]
+                                then
+                                        echo '//////////////////////////////'
+                                        mkjournal $2/$fich $1/$fich
+                                        echo '------------------------------'
+                                else
+                                        echo "Il y a conflit, les 2 éléments ne sont pas du même type" >> journalconflit
+                                fi
+                        else
+                                mkdir $1/$fich
+                                echo '//////////////////////////////'
+                                mkjournal $2/$fich $1/$fich
+                                echo '------------------------------'
+                        fi
+                fi
+        done
+
+        cat journaltemp > journal
+}
+
+
+isjournalvide=$(wc -c journal | awk 'BEGIN{FS=" "} {print $1}')
+
+if [[ $isjournalvide -eq 1 ]]
+then
+        echo "Le fichier journal est vide"
+        mkjournal $1 $2
+else
+        synchro $1 $2
+fi
+
+cat journaltemp > journal
+
+echo "Synchronisation terminée"
+
+cat ../logo

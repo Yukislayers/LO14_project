@@ -1,0 +1,20 @@
+#!/bin/bash
+#Compare les contenu de 2 repértoires
+
+folder1=$1
+folder2=$2
+
+nb1=$(find /home/Shino/ArbreA -type f | wc -l | awk '{print $1}')
+nb2=$(find /home/Shino/ArbreB -type f | wc -l | awk '{print $1}')
+
+if (( "$nb1" == "$nb2" ))
+then
+        echo "L'Arbre A a le même nombre de fichier que l'arbre B"
+else if (( "$nb1" > "$nb2" ))
+        then
+                echo "L'arbre A possède plus de fichiers que l'arbre A"
+        else
+                echo "L'arbre B possède plus de fichiers que l'arbre A"
+        fi
+fi
+
